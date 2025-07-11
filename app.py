@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory, make_response
 import os
 import uuid
 from werkzeug.utils import secure_filename
@@ -6,33 +6,51 @@ import re
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
+import requests
 
 app = Flask(__name__)
 app.secret_key = 'super-strong-random-secret-key'
 
 UPLOAD_FOLDER = 'uploads'
-DATA_FILE = 'data/posts.json'
-
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs('logs', exist_ok=True)
 os.makedirs('data', exist_ok=True)
 
-# Admin credentials
+# Configs
+GOOGLE_DRIVE_FILE_ID = '1w0ko-iu52phLP8KtqWCJmXmJ4kPinVxi'  # your GDrive ID
+REMOTE_POSTS_URL = f'https://drive.google.com/uc?export=download&id=1w0ko-iu52phLP8KtqWCJmXmJ4kPinVxi'
+LOCAL_POSTS_FILE = 'data/posts.json'
+LOG_FILE = 'logs/activity_log.json'
+
+# Load posts from GDrive initially
+try:
+    r = requests.get(REMOTE_POSTS_URL)
+    posts = r.json()
+except:
+    posts = {}
+
+# Load activity log
+if os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'r') as f:
+        activity_log = json.load(f)
+else:
+    activity_log = []
+
+# Admin login
 ADMIN_USERNAME = 'rootadmin'
 ADMIN_PASSWORD_HASH = generate_password_hash('neverguess123!')
 
-# Load posts from file or empty
-if os.path.exists(DATA_FILE):
-    with open(DATA_FILE, 'r') as f:
-        posts = json.load(f)
-else:
-    posts = {}
+# Save log
+def save_log():
+    with open(LOG_FILE, 'w') as f:
+        json.dump(activity_log, f, indent=2)
 
-# Save posts to file
+# Save posts to local file
 def save_posts():
-    with open(DATA_FILE, 'w') as f:
+    with open(LOCAL_POSTS_FILE, 'w') as f:
         json.dump(posts, f, indent=2)
 
-# Slugify title
+# Slug generator
 def slugify(title):
     slug = re.sub(r'[^a-zA-Z0-9\s-]', '', title).lower()
     slug = re.sub(r'\s+', '-', slug).strip('-')
@@ -42,6 +60,8 @@ def slugify(title):
         slug = f"{original_slug}-{count}"
         count += 1
     return slug
+
+# Routes
 
 @app.route('/')
 def home():
@@ -105,7 +125,17 @@ def admin():
             'created_at': datetime.now().strftime('%d %b %Y, %I:%M %p')
         }
 
+        # Save posts + log
         save_posts()
+
+        activity_log.append({
+            'slug': slug,
+            'title': title,
+            'files': [f['filename'] for f in uploaded_files],
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        save_log()
+
         return redirect(url_for('view_consumer', slug=slug))
 
     return render_template('admin.html', error=error, posts=posts)
@@ -130,7 +160,6 @@ def download_file(slug, filename):
 
     return "File not found", 404
 
-
 @app.route('/delete/<slug>', methods=['POST'])
 def delete_slug(slug):
     if not session.get('admin_logged_in'):
@@ -138,13 +167,41 @@ def delete_slug(slug):
 
     post = posts.get(slug)
     if post:
-        try:
-            os.remove(post['filepath'])
-        except:
-            pass
+        for file in post.get('files', []):
+            try:
+                os.remove(file['filepath'])
+            except:
+                pass
         posts.pop(slug)
         save_posts()
+        activity_log.append({
+            'slug': slug,
+            'action': 'deleted',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        save_log()
     return redirect('/admin')
 
+@app.route('/download-json')
+def download_json():
+    if not session.get('admin_logged_in'):
+        return redirect('/login')
+
+    response = make_response(json.dumps(posts, indent=2))
+    response.headers['Content-Disposition'] = 'attachment; filename=posts.json'
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
+@app.route('/download-log')
+def download_log():
+    if not session.get('admin_logged_in'):
+        return redirect('/login')
+
+    response = make_response(json.dumps(activity_log, indent=2))
+    response.headers['Content-Disposition'] = 'attachment; filename=activity_log.json'
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
+# Run app
 if __name__ == '__main__':
     app.run(debug=True)
