@@ -75,22 +75,33 @@ def admin():
     if request.method == 'POST':
         title = request.form.get('title')
         body = request.form.get('body', '')
-        file = request.files.get('doc')
+        file1 = request.files.get('file1')
+        file2 = request.files.get('file2')
+        file3 = request.files.get('file3')
 
-        if not title or not file:
-            error = "Title and document are required."
+        files = [file1, file2, file3]
+        uploaded_files = []
+
+        if not title or not file1:
+            error = "Title and at least one document are required."
             return render_template('admin.html', error=error, posts=posts)
 
         slug = slugify(title)
-        filename = secure_filename(file.filename)
-        saved_path = os.path.join(UPLOAD_FOLDER, slug + "_" + filename)
-        file.save(saved_path)
+
+        for file in files:
+            if file and file.filename:
+                filename = secure_filename(file.filename)
+                saved_path = os.path.join(UPLOAD_FOLDER, slug + "_" + filename)
+                file.save(saved_path)
+                uploaded_files.append({
+                    'filename': filename,
+                    'filepath': saved_path
+                })
 
         posts[slug] = {
             'title': title,
             'body': body,
-            'filename': filename,
-            'filepath': saved_path,
+            'files': uploaded_files,
             'created_at': datetime.now().strftime('%d %b %Y, %I:%M %p')
         }
 
@@ -106,14 +117,19 @@ def view_consumer(slug):
         return "Document not found", 404
     return render_template('consumer.html', post=post, slug=slug)
 
-@app.route('/download/<slug>')
-def download_file(slug):
+@app.route('/download/<slug>/<filename>')
+def download_file(slug, filename):
     post = posts.get(slug)
     if not post:
         return "File not found", 404
-    directory = os.path.dirname(post['filepath'])
-    filename = os.path.basename(post['filepath'])
-    return send_from_directory(directory, filename, as_attachment=True)
+
+    for file in post.get('files', []):
+        if file['filename'] == filename:
+            directory = os.path.dirname(file['filepath'])
+            return send_from_directory(directory, os.path.basename(file['filepath']), as_attachment=True)
+
+    return "File not found", 404
+
 
 @app.route('/delete/<slug>', methods=['POST'])
 def delete_slug(slug):

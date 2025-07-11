@@ -69,7 +69,12 @@
 <body>
     <div class="container">
         <h1>{{ post.title }}</h1>
-        <a href="{{ url_for('download_file', slug=slug) }}" class="download-btn">⬇️ Download File</a>
+        {% for file in post.files %}
+<a href="{{ url_for('download_file', slug=slug, filename=file.filename) }}" class="download-btn">
+    ⬇️ Download {{ file.filename }}
+</a>
+{% endfor %}
+
         {% if post.body %}
         <div class="body-text">{{ post.body }}</div>
         {% endif %}
