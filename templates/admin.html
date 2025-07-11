@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Upload</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 3em;
+        }
+        th, td {
+            border: 1px solid #aaa;
+            padding: 8px;
+            text-align: left;
+            font-family: sans-serif;
+        }
+        th {
+            background-color: #ddd;
+        }
+        .del-btn {
+            background: red;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .del-btn:hover {
+            background: darkred;
+        }
+        a {
+            text-decoration: none;
+            color: #0012ff;
+        }
+    </style>
+</head>
+<body style="font-family: Arial; padding: 2em;">
+    <h2>Upload Document</h2>
+
+    {% if error %}
+    <div style="color: red; margin-bottom: 1em;"><strong>{{ error }}</strong></div>
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data">
+        <label><strong>Title *</strong></label><br>
+        <input type="text" name="title" required style="width: 100%; padding: 8px;"><br><br>
+
+        <label><strong>Document File *</strong></label><br>
+        <input type="file" name="doc" required><br><br>
+
+        <label><strong>Body (optional)</strong></label><br>
+        <textarea name="body" rows="5" style="width: 100%; padding: 8px;"></textarea><br><br>
+
+        <button type="submit" style="padding: 10px 20px;">Upload</button>
+    </form>
+
+    {% if posts %}
+    <h2>All Uploaded Pages</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Page Link</th>
+                <th>File Name</th>
+                <th>Title</th>
+                <th>Body (preview)</th>
+                <th>Uploaded At</th>
+                <th>Delete</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for slug, post in posts.items() %}
+            <tr>
+                <td><a href="{{ url_for('view_consumer', slug=slug) }}" target="_blank">{{ slug }}</a></td>
+                <td>{{ post.filename }}</td>
+                <td>{{ post.title }}</td>
+                <td>{{ post.body[:100] }}{% if post.body|length > 100 %}...{% endif %}</td>
+                <td>{{ post.created_at }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('delete_slug', slug=slug) }}" onsubmit="return confirm('Delete this page?');">
+                        <button class="del-btn">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</body>
+</html>
